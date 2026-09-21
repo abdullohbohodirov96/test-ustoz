@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test topshirilmoqda…</title><link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="inner">
+    <div class="logo"><span class="mark">📝</span> <span id="testTitle">Test</span></div>
+    <div class="spacer"></div>
+    <span style="font-size:14px;opacity:.9" id="studentName"></span>
+  </div>
+</div>
+
+<div class="container">
+  <div class="quiz-head">
+    <span class="pill" id="counter">Savol 1 / 1</span>
+    <span class="pill timer" id="timer">--:--</span>
+  </div>
+  <div class="progress"><div class="bar" id="bar"></div></div>
+
+  <div class="card pad-lg" id="qCard">
+    <div class="qnum" id="qnum">Savol 1</div>
+    <div class="qtext" id="qtext">Yuklanmoqda…</div>
+    <div id="opts"></div>
+
+    <div class="quiz-foot">
+      <span class="warn-back">⚠️ Orqaga qaytish mumkin emas</span>
+      <button class="btn" id="nextBtn" disabled>Keyingisi →</button>
+    </div>
+  </div>
+
+  <div class="alert err" id="err"></div>
+</div>
+
+<script src="/js/test.js"></script>
+</body>
+</html>

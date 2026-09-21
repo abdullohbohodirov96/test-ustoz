@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test natijasi</title><link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>">
+</head>
+<body>
+
+<div class="topbar no-print">
+  <div class="inner">
+    <div class="logo"><span class="mark">📝</span> Test natijasi</div>
+    <div class="spacer"></div>
+    <a href="/">Bosh sahifa</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Ekranda ko'rinadigan natija -->
+  <div class="card no-print" id="mainCard">
+    <div class="score-hero">
+      <div class="score-circle" id="circle">
+        <div>
+          <div class="p" id="percent">–</div>
+          <div class="l">FOIZ</div>
+        </div>
+      </div>
+      <h1 id="verdict">Yuklanmoqda…</h1>
+      <p class="sub mb0" id="who"></p>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat good"><div class="v" id="sCorrect">0</div><div class="k">To'g'ri javob</div></div>
+      <div class="stat bad"><div class="v" id="sWrong">0</div><div class="k">Noto'g'ri javob</div></div>
+      <div class="stat"><div class="v" id="sTotal">0</div><div class="k">Jami savol</div></div>
+      <div class="stat brand"><div class="v" id="sGrade">–</div><div class="k">Baho</div></div>
+    </div>
+
+    <div class="alert ok show" id="tgNote" style="display:none">
+      📨 Natijangiz Telegram botga yuborildi.
+    </div>
+
+    <div class="row no-print">
+      <button class="btn ghost" onclick="window.print()">🖨️ PDF / Sertifikat saqlash</button>
+      <a class="btn ghost" href="/" style="text-align:center">🏠 Bosh sahifa</a>
+    </div>
+  </div>
+
+  <!-- Bosib chiqarilganda ko'rinadigan sertifikat -->
+  <div class="cert" id="cert">
+    <h2>Sertifikat</h2>
+    <p class="line">Ushbu sertifikat quyidagi shaxsga berildi:</p>
+    <div class="name" id="cName">—</div>
+    <p class="line" id="cGroup"></p>
+    <hr style="margin:20px auto;width:60%;border:none;border-top:1px solid #e5e7eb">
+    <p class="line"><b id="cTest"></b> testi bo'yicha</p>
+    <p class="line" id="cScore"></p>
+    <p class="line" id="cGrade"></p>
+    <p class="line muted" id="cDate" style="margin-top:22px"></p>
+  </div>
+
+  <div class="card no-print" id="reviewCard" style="display:none">
+    <h2>Javoblar tahlili</h2>
+    <div id="review"></div>
+  </div>
+
+  <div class="alert err" id="err"></div>
+</div>
+
+<script src="/js/result.js"></script>
+</body>
+</html>

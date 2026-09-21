@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onlayn test tizimi</title><link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="inner">
+    <div class="logo"><span class="mark">📝</span> Onlayn test tizimi</div>
+    <div class="spacer"></div>
+    <a href="/admin">Admin panel</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="card pad-lg">
+    <h1>Testni boshlash</h1>
+    <p class="sub">Ma'lumotlaringizni to'liq va to'g'ri kiriting. Natija shu ma'lumotlar bilan saqlanadi.</p>
+
+    <div class="alert err" id="err"></div>
+
+    <h3>1. Testni tanlang</h3>
+    <div id="testList"><div class="muted">Yuklanmoqda…</div></div>
+
+    <div id="formBlock" style="display:none">
+      <h3 class="mt">2. Ma'lumotlaringiz</h3>
+      <div class="field">
+        <label>Familiya <span class="hint">— lotin harflarida</span></label>
+        <input type="text" id="lastName" placeholder="Masalan: Bohodirov" autocomplete="family-name">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Ism</label>
+          <input type="text" id="firstName" placeholder="Masalan: Abdulloh" autocomplete="given-name">
+        </div>
+        <div class="field">
+          <label>Otasining ismi</label>
+          <input type="text" id="middleName" placeholder="Masalan: Ulugbek o'g'li">
+        </div>
+      </div>
+      <div class="field">
+        <label>Guruh nomeri</label>
+        <input type="text" id="groupName" placeholder="Masalan: 21-12 yoki KI-301">
+      </div>
+
+      <div class="alert info show" id="rules"></div>
+
+      <button class="btn block" id="startBtn">Testni boshlash →</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="/js/index.js"></script>
+</body>
+</html>
