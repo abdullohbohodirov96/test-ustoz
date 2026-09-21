@@ -1,0 +1,9 @@
+#!/bin/bash
+# Loyiha papkasi = .app dan uchta yuqori
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+/usr/bin/osascript <<OSA
+tell application "Terminal"
+  activate
+  do script "clear; cd '$DIR' && bash ./start.sh"
+end tell
+OSA
