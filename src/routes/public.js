@@ -1,36 +1,33 @@
 'use strict';
 const express = require('express');
-const db = require('../db');
+const store = require('../store');
 const { properCase, validName, shuffle, token, gradeOf, nowIso } = require('../util');
 
 const router = express.Router();
 const LETTERS = ['A', 'B', 'C', 'D'];
 
 /* ------------------------------------------------------------ Faol testlar */
-router.get('/tests', async (req, res) => {
-  const rows = await db.all(
-    `SELECT t.id, t.title, t.subject, t.description, t.duration_min, t.questions_per_attempt,
-            (SELECT COUNT(*) FROM questions q WHERE q.test_id = t.id) AS q_count
-     FROM tests t WHERE t.is_active = 1 ORDER BY t.id DESC`
-  );
-  res.json(
-    rows
-      .filter((t) => Number(t.q_count) > 0)
-      .map((t) => ({
+router.get('/tests', (req, res) => {
+  const out = store.tests.active()
+    .map((t) => {
+      const count = store.questions.countByTest(t.id);
+      return {
         id: t.id,
         title: t.title,
         subject: t.subject,
         description: t.description,
         durationMin: t.duration_min,
-        questions: t.questions_per_attempt > 0
-          ? Math.min(t.questions_per_attempt, Number(t.q_count))
-          : Number(t.q_count),
-      }))
-  );
+        questions: t.questions_per_attempt > 0 ? Math.min(t.questions_per_attempt, count) : count,
+        _count: count,
+      };
+    })
+    .filter((t) => t._count > 0)
+    .map(({ _count, ...t }) => t);
+  res.json(out);
 });
 
 /* ------------------------------------------------------------ Testni boshlash */
-router.post('/attempts', async (req, res) => {
+router.post('/attempts', (req, res) => {
   try {
     const { testId } = req.body || {};
     const lastName = properCase(req.body.lastName);
@@ -43,17 +40,15 @@ router.post('/attempts', async (req, res) => {
     if (!validName(middleName)) return res.status(400).json({ error: 'Otasining ismi lotin harflarida kiritilsin' });
     if (!groupName || groupName.length > 30) return res.status(400).json({ error: 'Guruh nomerini kiriting' });
 
-    const test = await db.get('SELECT * FROM tests WHERE id = ? AND is_active = 1', [testId]);
-    if (!test) return res.status(404).json({ error: 'Test topilmadi yoki faol emas' });
+    const test = store.tests.get(testId);
+    if (!test || !test.is_active) return res.status(404).json({ error: 'Test topilmadi yoki faol emas' });
 
-    let qs = await db.all('SELECT id FROM questions WHERE test_id = ? ORDER BY position, id', [test.id]);
-    if (!qs.length) return res.status(400).json({ error: 'Bu testda savollar yo\'q' });
+    let ids = store.questions.byTest(test.id).map((q) => q.id);
+    if (!ids.length) return res.status(400).json({ error: "Bu testda savollar yo'q" });
 
-    let ids = qs.map((q) => q.id);
     if (test.shuffle_questions) ids = shuffle(ids);
     if (test.questions_per_attempt > 0) ids = ids.slice(0, test.questions_per_attempt);
 
-    // Variantlar tartibi ham har bir talabaga alohida
     const order = ids.map((id) => ({
       id,
       opt: test.shuffle_options ? shuffle([0, 1, 2, 3]) : [0, 1, 2, 3],
@@ -63,20 +58,26 @@ router.post('/attempts', async (req, res) => {
     const deadline = new Date(started.getTime() + (test.duration_min || 30) * 60000);
     const tk = token();
 
-    const attemptId = await db.insert(
-      `INSERT INTO attempts
-       (token, test_id, test_title, last_name, first_name, middle_name, group_name,
-        order_json, answers_json, current_index, total, status, started_at, deadline_at, ip)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [tk, test.id, test.title, lastName, firstName, middleName, groupName,
-       JSON.stringify(order), '{}', 0, order.length, 'active',
-       started.toISOString(), deadline.toISOString(),
-       String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim()]
-    );
+    const attemptId = store.attempts.create({
+      token: tk,
+      test_id: test.id,
+      test_title: test.title,
+      last_name: lastName, first_name: firstName, middle_name: middleName,
+      group_name: groupName,
+      order: order,
+      answers: {},
+      current_index: 0,
+      total: order.length,
+      correct_count: 0, wrong_count: 0, percent: 0, grade: 0, passed: 0,
+      status: 'active',
+      started_at: started.toISOString(),
+      deadline_at: deadline.toISOString(),
+      finished_at: null,
+      ip: String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim(),
+    });
 
     res.json({
-      attemptId,
-      token: tk,
+      attemptId, token: tk,
       total: order.length,
       durationMin: test.duration_min,
       deadline: deadline.toISOString(),
@@ -91,187 +92,134 @@ router.post('/attempts', async (req, res) => {
 });
 
 /* ---------------------------------------------------------- Yordamchi */
-async function loadAttempt(req, res) {
-  const { id } = req.params;
+function loadAttempt(req, res) {
   const tk = req.get('X-Attempt-Token') || req.query.token || (req.body && req.body.token);
-  const a = await db.get('SELECT * FROM attempts WHERE id = ?', [id]);
+  const a = store.attempts.get(req.params.id);
   if (!a) { res.status(404).json({ error: 'Urinish topilmadi' }); return null; }
-  if (a.token !== tk) { res.status(403).json({ error: 'Ruxsat yo\'q' }); return null; }
+  if (a.token !== tk) { res.status(403).json({ error: "Ruxsat yo'q" }); return null; }
   return a;
 }
 
 function publicQuestion(q, mapping, index, total) {
   const src = [q.opt_a, q.opt_b, q.opt_c, q.opt_d];
   return {
-    index,
-    total,
-    number: index + 1,
-    text: q.text,
+    index, total, number: index + 1, text: q.text,
     options: mapping.map((origIdx, i) => ({ letter: LETTERS[i], text: src[origIdx] || '' })),
   };
 }
 
 /* ------------------------------------------------------------ Joriy savol */
-router.get('/attempts/:id/question', async (req, res) => {
-  const a = await loadAttempt(req, res);
+router.get('/attempts/:id/question', (req, res) => {
+  const a = loadAttempt(req, res);
   if (!a) return;
   if (a.status !== 'active') return res.json({ finished: true });
-  if (new Date() > new Date(a.deadline_at)) {
-    await finishAttempt(a, 'timeout');
-    return res.json({ finished: true, reason: 'timeout' });
-  }
-  const order = JSON.parse(a.order_json);
-  if (a.current_index >= order.length) { await finishAttempt(a, 'done'); return res.json({ finished: true }); }
+  if (new Date() > new Date(a.deadline_at)) { finishAttempt(a, 'timeout'); return res.json({ finished: true, reason: 'timeout' }); }
+  if (a.current_index >= a.order.length) { finishAttempt(a, 'done'); return res.json({ finished: true }); }
 
-  const item = order[a.current_index];
-  const q = await db.get('SELECT * FROM questions WHERE id = ?', [item.id]);
+  const item = a.order[a.current_index];
+  const q = store.questions.get(item.id);
   if (!q) return res.status(500).json({ error: 'Savol topilmadi' });
 
   res.json({
     finished: false,
-    question: publicQuestion(q, item.opt, a.current_index, order.length),
+    question: publicQuestion(q, item.opt, a.current_index, a.order.length),
     deadline: a.deadline_at,
   });
 });
 
 /* ------------------------------------------------------------ Javob berish */
-router.post('/attempts/:id/answer', async (req, res) => {
-  const a = await loadAttempt(req, res);
+router.post('/attempts/:id/answer', (req, res) => {
+  const a = loadAttempt(req, res);
   if (!a) return;
   if (a.status !== 'active') return res.json({ finished: true });
-
-  if (new Date() > new Date(a.deadline_at)) {
-    const r = await finishAttempt(a, 'timeout');
-    return res.json({ finished: true, reason: 'timeout', resultToken: r.token });
-  }
+  if (new Date() > new Date(a.deadline_at)) { finishAttempt(a, 'timeout'); return res.json({ finished: true, reason: 'timeout' }); }
 
   const { choice, index } = req.body || {};
-  const order = JSON.parse(a.order_json);
   if (Number(index) !== a.current_index) {
     return res.status(409).json({ error: 'Savol tartibi mos emas', currentIndex: a.current_index });
   }
 
-  const answers = JSON.parse(a.answers_json || '{}');
-  const item = order[a.current_index];
+  const item = a.order[a.current_index];
   const letterIdx = LETTERS.indexOf(String(choice || '').toUpperCase());
-  // ko'rsatilgan harfni asl variant indeksiga qaytaramiz
-  answers[String(item.id)] = letterIdx >= 0 ? LETTERS[item.opt[letterIdx]] : null;
+  a.answers[String(item.id)] = letterIdx >= 0 ? LETTERS[item.opt[letterIdx]] : null;
+  a.current_index += 1;
+  store.attempts.update(a.id, { answers: a.answers, current_index: a.current_index });
 
-  const nextIndex = a.current_index + 1;
-  await db.run('UPDATE attempts SET answers_json = ?, current_index = ? WHERE id = ?', [
-    JSON.stringify(answers), nextIndex, a.id,
-  ]);
-
-  if (nextIndex >= order.length) {
-    const fresh = await db.get('SELECT * FROM attempts WHERE id = ?', [a.id]);
-    await finishAttempt(fresh, 'done');
-    return res.json({ finished: true });
-  }
-  res.json({ finished: false, nextIndex });
+  if (a.current_index >= a.order.length) { finishAttempt(a, 'done'); return res.json({ finished: true }); }
+  res.json({ finished: false, nextIndex: a.current_index });
 });
 
 /* ------------------------------------------------------------ Yakunlash */
-async function finishAttempt(a, reason) {
+function finishAttempt(a, reason) {
   if (a.status !== 'active') return a;
-  const order = JSON.parse(a.order_json);
-  const answers = JSON.parse(a.answers_json || '{}');
-  const ids = order.map((o) => o.id);
-  const placeholders = ids.map(() => '?').join(',');
-  const qs = ids.length
-    ? await db.all(`SELECT id, text, opt_a, opt_b, opt_c, opt_d, correct FROM questions WHERE id IN (${placeholders})`, ids)
-    : [];
+  const qs = store.questions.getMany(a.order.map((o) => o.id));
   const byId = new Map(qs.map((q) => [String(q.id), q]));
 
   let correct = 0;
-  const detail = [];
-  for (const o of order) {
+  for (const o of a.order) {
     const q = byId.get(String(o.id));
     if (!q) continue;
-    const given = answers[String(o.id)] || null;
-    const ok = given && given === q.correct;
-    if (ok) correct++;
-    detail.push({
-      text: q.text,
-      given,
-      correct: q.correct,
-      ok: !!ok,
-      options: { A: q.opt_a, B: q.opt_b, C: q.opt_c, D: q.opt_d },
-    });
+    if (a.answers[String(o.id)] === q.correct) correct++;
   }
-  const total = order.length;
+  const total = a.order.length;
   const wrong = total - correct;
   const percent = total ? Math.round((correct / total) * 100) : 0;
-  const grade = gradeOf(percent);
+  const test = store.tests.get(a.test_id);
 
-  const test = await db.get('SELECT pass_percent, show_answers FROM tests WHERE id = ?', [a.test_id]);
-  const passed = percent >= (test ? test.pass_percent : 60) ? 1 : 0;
+  store.attempts.update(a.id, {
+    status: reason === 'timeout' ? 'timeout' : 'finished',
+    finished_at: nowIso(),
+    correct_count: correct, wrong_count: wrong,
+    percent, grade: gradeOf(percent),
+    passed: percent >= (test ? test.pass_percent : 60) ? 1 : 0,
+    total,
+  });
+  return store.attempts.get(a.id);
+}
 
-  await db.run(
-    `UPDATE attempts SET status = ?, finished_at = ?, correct_count = ?, wrong_count = ?,
-     percent = ?, grade = ?, passed = ?, total = ? WHERE id = ?`,
-    [reason === 'timeout' ? 'timeout' : 'finished', nowIso(), correct, wrong, percent, grade, passed, total, a.id]
-  );
-
-  const updated = await db.get('SELECT * FROM attempts WHERE id = ?', [a.id]);
-  updated._detail = detail;
-  updated._showAnswers = test ? !!test.show_answers : true;
-  return updated;
+/** Natija tafsilotlari (savol, berilgan javob, to'g'ri javob) */
+function buildDetail(a) {
+  const qs = store.questions.getMany(a.order.map((o) => o.id));
+  const byId = new Map(qs.map((q) => [String(q.id), q]));
+  return a.order.map((o, i) => {
+    const q = byId.get(String(o.id));
+    if (!q) return null;
+    const given = a.answers[String(o.id)] || null;
+    return {
+      n: i + 1, text: q.text,
+      options: { A: q.opt_a, B: q.opt_b, C: q.opt_c, D: q.opt_d },
+      given, correct: q.correct, ok: given === q.correct,
+    };
+  }).filter(Boolean);
 }
 
 /* ------------------------------------------------------------ Natija */
-router.get('/attempts/:id/result', async (req, res) => {
-  let a = await loadAttempt(req, res);
+router.get('/attempts/:id/result', (req, res) => {
+  let a = loadAttempt(req, res);
   if (!a) return;
-  if (a.status === 'active') a = await finishAttempt(a, 'manual');
+  if (a.status === 'active') a = finishAttempt(a, 'manual');
 
-  const test = await db.get('SELECT show_answers, pass_percent, title, subject FROM tests WHERE id = ?', [a.test_id]);
-  let detail = [];
-  if (test && test.show_answers) {
-    const order = JSON.parse(a.order_json);
-    const answers = JSON.parse(a.answers_json || '{}');
-    const ids = order.map((o) => o.id);
-    if (ids.length) {
-      const ph = ids.map(() => '?').join(',');
-      const qs = await db.all(`SELECT * FROM questions WHERE id IN (${ph})`, ids);
-      const byId = new Map(qs.map((q) => [String(q.id), q]));
-      detail = order.map((o, i) => {
-        const q = byId.get(String(o.id));
-        if (!q) return null;
-        const given = answers[String(o.id)] || null;
-        return {
-          n: i + 1,
-          text: q.text,
-          options: { A: q.opt_a, B: q.opt_b, C: q.opt_c, D: q.opt_d },
-          given,
-          correct: q.correct,
-          ok: given === q.correct,
-        };
-      }).filter(Boolean);
-    }
-  }
+  const test = store.tests.get(a.test_id);
+  const showAnswers = !!(test && test.show_answers);
 
   res.json({
     student: { last: a.last_name, first: a.first_name, middle: a.middle_name, group: a.group_name },
     test: { title: a.test_title, subject: test ? test.subject : '' },
-    total: a.total,
-    correct: a.correct_count,
-    wrong: a.wrong_count,
-    percent: a.percent,
-    grade: a.grade,
-    passed: !!a.passed,
-    startedAt: a.started_at,
-    finishedAt: a.finished_at,
-    showAnswers: !!(test && test.show_answers),
-    detail,
+    total: a.total, correct: a.correct_count, wrong: a.wrong_count,
+    percent: a.percent, grade: a.grade, passed: !!a.passed,
+    startedAt: a.started_at, finishedAt: a.finished_at,
+    showAnswers,
+    detail: showAnswers ? buildDetail(a) : [],
   });
 });
 
 /* ------------------------------------------------- Testni erta yakunlash */
-router.post('/attempts/:id/finish', async (req, res) => {
-  const a = await loadAttempt(req, res);
+router.post('/attempts/:id/finish', (req, res) => {
+  const a = loadAttempt(req, res);
   if (!a) return;
-  if (a.status === 'active') await finishAttempt(a, 'manual');
+  if (a.status === 'active') finishAttempt(a, 'manual');
   res.json({ ok: true });
 });
 
 module.exports = router;
+module.exports.buildDetail = buildDetail;

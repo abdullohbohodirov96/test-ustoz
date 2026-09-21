@@ -1,5 +1,4 @@
 #!/bin/bash
-# Loyiha papkasi = .app dan uchta yuqori
 DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 /usr/bin/osascript <<OSA
 tell application "Terminal"
