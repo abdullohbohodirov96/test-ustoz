@@ -29,7 +29,38 @@
     $('sTotal').textContent = d.total;
     $('sGrade').textContent = d.grade;
 
-    if (d.telegram) $('tgNote').style.display = 'block';
+    /* --- natijani matn qilib nusxalash --- */
+    $('copyBtn').addEventListener('click', async () => {
+      const lines = [
+        `F.I.O: ${fio}`,
+        `Guruh: ${d.student.group}`,
+        `Test: ${d.test.title}`,
+        `To'g'ri javob: ${d.correct} ta`,
+        `Noto'g'ri javob: ${d.wrong} ta`,
+        `Jami savol: ${d.total} ta`,
+        `Natija: ${d.percent}%   Baho: ${d.grade} (${GRADE_TEXT[d.grade] || ''})`,
+        `Sana: ${new Date(d.finishedAt || Date.now()).toLocaleString('uz-UZ')}`,
+      ].join('\n');
+      let ok = false;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(lines); ok = true;
+        }
+      } catch (e) {}
+      if (!ok) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = lines; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (e) {}
+      }
+      const note = $('copyNote');
+      note.textContent = ok ? '✅ Natija nusxalandi — istalgan joyga qo\'ying.' : '⚠️ Nusxalab bo\'lmadi.';
+      note.classList.add('show');
+      setTimeout(() => note.classList.remove('show'), 4000);
+    });
 
     // sertifikat
     $('cName').textContent = fio;

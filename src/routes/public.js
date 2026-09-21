@@ -1,7 +1,6 @@
 'use strict';
 const express = require('express');
 const db = require('../db');
-const tg = require('../telegram');
 const { properCase, validName, shuffle, token, gradeOf, nowIso } = require('../util');
 
 const router = express.Router();
@@ -216,8 +215,6 @@ async function finishAttempt(a, reason) {
   const updated = await db.get('SELECT * FROM attempts WHERE id = ?', [a.id]);
   updated._detail = detail;
   updated._showAnswers = test ? !!test.show_answers : true;
-
-  tg.sendResult(updated).catch(() => {});
   return updated;
 }
 
@@ -265,7 +262,6 @@ router.get('/attempts/:id/result', async (req, res) => {
     startedAt: a.started_at,
     finishedAt: a.finished_at,
     showAnswers: !!(test && test.show_answers),
-    telegram: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
     detail,
   });
 });

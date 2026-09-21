@@ -28,13 +28,32 @@ async function init() {
     await pool.query('SELECT 1');
   } else {
     const Database = require('better-sqlite3');
-    const dir = path.resolve(process.env.DATA_DIR || './data');
-    fs.mkdirSync(dir, { recursive: true });
-    sqlite = new Database(path.join(dir, 'test.db'));
-    // WAL tezroq, lekin ba'zi tarmoq/virtual disklarda ishlamaydi — xato bo'lsa oddiy rejim
-    try { sqlite.pragma('journal_mode = WAL'); }
-    catch { try { sqlite.pragma('journal_mode = DELETE'); } catch {} }
-    try { sqlite.pragma('foreign_keys = ON'); } catch {}
+    const os = require('os');
+    // Agar loyiha papkasi iCloud/OneDrive/tarmoq diskida bo'lsa SQLite ishlamasligi mumkin —
+    // shunday holatda uy papkasiga, keyin vaqtinchalik papkaga o'tamiz.
+    const candidates = [
+      path.resolve(process.env.DATA_DIR || './data'),
+      path.join(os.homedir(), '.test-ustoz'),
+      path.join(os.tmpdir(), 'test-ustoz'),
+    ];
+    let lastErr = null;
+    for (const dir of candidates) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        const conn = new Database(path.join(dir, 'test.db'));
+        try { conn.pragma('journal_mode = WAL'); }
+        catch { try { conn.pragma('journal_mode = DELETE'); } catch {} }
+        try { conn.pragma('foreign_keys = ON'); } catch {}
+        conn.prepare('CREATE TABLE IF NOT EXISTS _probe (x INTEGER)').run();
+        conn.prepare('DROP TABLE _probe').run();
+        sqlite = conn;
+        if (dir !== candidates[0]) {
+          console.warn(`[db] "${candidates[0]}" papkasiga yozib bo'lmadi, baza shu yerda: ${dir}`);
+        }
+        break;
+      } catch (e) { lastErr = e; }
+    }
+    if (!sqlite) throw lastErr;
   }
   await migrate();
   console.log(`[db] ${IS_PG ? 'PostgreSQL' : 'SQLite'} tayyor`);

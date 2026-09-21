@@ -281,11 +281,33 @@
   });
 
   /* ------------------------------------------------------------- results */
+  let lastResults = [];
+
+  /** Matnni buferga nusxalash (https bo'lmagan lokal tarmoqda ham ishlaydi) */
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
   async function loadResults() {
     const params = new URLSearchParams();
     if ($('resTestSel').value) params.set('testId', $('resTestSel').value);
     if ($('resSearch').value.trim()) params.set('q', $('resSearch').value.trim());
     const rows = await api('/api/admin/results?' + params);
+    lastResults = rows;
     $('resBody').innerHTML = rows.length
       ? rows.map((r, i) => `<tr>
           <td>${i + 1}</td>
@@ -299,9 +321,14 @@
           <td>${r.passed ? '<span class="badge ok">O\'tdi</span>' : '<span class="badge bad">O\'tmadi</span>'}
               ${r.status === 'timeout' ? ' <span class="badge gray">vaqt tugadi</span>' : ''}</td>
           <td class="muted" style="white-space:nowrap">${r.finished_at ? new Date(r.finished_at).toLocaleString('uz-UZ') : '-'}</td>
-          <td><button class="btn sm danger" data-rd="${r.id}">🗑</button></td>
+          <td style="white-space:nowrap">
+            <button class="btn sm ghost" data-rv="${r.id}" title="Batafsil ko'rish">👁</button>
+            <button class="btn sm danger" data-rd="${r.id}">🗑</button></td>
         </tr>`).join('')
       : '<tr><td colspan="11" class="empty">Hali natija yo\'q</td></tr>';
+
+    $('resBody').querySelectorAll('[data-rv]').forEach((b) =>
+      b.addEventListener('click', () => showResult(b.dataset.rv)));
 
     $('resBody').querySelectorAll('[data-rd]').forEach((b) =>
       b.addEventListener('click', async () => {
@@ -318,24 +345,69 @@
     location.href = '/api/admin/results/export.xlsx' + p;
   });
 
-  /* ------------------------------------------------------------ telegram */
-  async function loadTg() {
-    try {
-      const s = await api('/api/admin/telegram/status');
-      $('tgStatus').innerHTML = s.configured
-        ? `✅ Bot sozlangan (chat: ${esc(s.chatId)})`
-        : '⚠️ Bot hali sozlanmagan — TELEGRAM_BOT_TOKEN va TELEGRAM_CHAT_ID kiriting.';
-    } catch (e) {}
-  }
-  $('tgTestBtn').addEventListener('click', async () => {
-    const b = $('tgTestBtn'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Yuborilmoqda…';
-    try {
-      const r = await api('/api/admin/telegram/test', { method: 'POST' });
-      if (r.ok) msg('ok', `Xabar yuborildi! Bot: @${r.bot}`);
-      else msg('err', r.error || 'Yuborilmadi');
-    } catch (e) { msg('err', e.message); }
-    finally { b.disabled = false; b.textContent = 'Sinov xabari yuborish'; }
+  /* Butun jadvalni matn qilib nusxalash (Excel/Word ga to'g'ridan-to'g'ri qo'yiladi) */
+  $('resCopy').addEventListener('click', async () => {
+    if (!lastResults.length) return msg('err', 'Nusxalash uchun natija yo\'q');
+    const head = ["№", 'Familiya', 'Ism', 'Otasining ismi', 'Guruh', 'Test',
+      'Jami', "To'g'ri", "Noto'g'ri", 'Foiz', 'Baho', 'Holat', 'Sana'].join('\t');
+    const body = lastResults.map((r, i) => [
+      i + 1, r.last_name, r.first_name, r.middle_name, r.group_name, r.test_title,
+      r.total, r.correct_count, r.wrong_count, r.percent + '%', r.grade,
+      r.passed ? "O'tdi" : "O'tmadi",
+      r.finished_at ? new Date(r.finished_at).toLocaleString('uz-UZ') : '',
+    ].join('\t')).join('\n');
+    const ok = await copyText(head + '\n' + body);
+    msg(ok ? 'ok' : 'err', ok
+      ? `${lastResults.length} ta natija nusxalandi — Excel yoki Word'ga qo'ying (Cmd/Ctrl+V)`
+      : 'Nusxalab bo\'lmadi, «⬇ Excel» tugmasidan foydalaning');
   });
+
+  /* Bitta talabaning to'liq natijasi */
+  async function showResult(id) {
+    try {
+      const d = await api('/api/admin/results/' + id);
+      const fio = `${d.student.last} ${d.student.first} ${d.student.middle}`;
+      const rows = d.detail.map((q) => {
+        const g = q.given ? `${q.given}) ${esc(q.options[q.given] || '')}` : 'javob berilmagan';
+        const c = `${q.correct}) ${esc(q.options[q.correct] || '')}`;
+        return `<div class="review-item ${q.ok ? 'ok' : 'bad'}">
+          <div class="q">${q.n}. ${esc(q.text)}</div>
+          <span class="a ${q.ok ? 'good' : 'wrong'}">Javobi: ${g}</span>
+          ${q.ok ? '' : `<span class="a good">To'g'ri: ${c}</span>`}
+        </div>`;
+      }).join('');
+
+      openModal(fio, `
+        <div class="stat-grid" style="margin-top:0">
+          <div class="stat good"><div class="v">${d.correct}</div><div class="k">To'g'ri</div></div>
+          <div class="stat bad"><div class="v">${d.wrong}</div><div class="k">Noto'g'ri</div></div>
+          <div class="stat"><div class="v">${d.total}</div><div class="k">Jami</div></div>
+          <div class="stat brand"><div class="v">${d.percent}%</div><div class="k">Baho: ${d.grade}</div></div>
+        </div>
+        <p class="muted">${esc(d.student.group)} guruh · ${esc(d.test)} ·
+          ${d.finishedAt ? new Date(d.finishedAt).toLocaleString('uz-UZ') : ''}
+          ${d.status === 'timeout' ? ' · <b>vaqt tugagan</b>' : ''}</p>
+        <button class="btn ghost sm" id="copyOne">📋 Nusxa olish</button>
+        <div class="mt">${rows || '<div class="muted">Javoblar saqlanmagan</div>'}</div>
+      `);
+
+      $('copyOne').addEventListener('click', async () => {
+        const lines = [
+          `F.I.O: ${fio}`,
+          `Guruh: ${d.student.group}`,
+          `Test: ${d.test}`,
+          `Natija: ${d.correct} to'g'ri / ${d.wrong} noto'g'ri (jami ${d.total})`,
+          `Foiz: ${d.percent}%   Baho: ${d.grade}`,
+          `Sana: ${d.finishedAt ? new Date(d.finishedAt).toLocaleString('uz-UZ') : '-'}`,
+          '',
+          ...d.detail.map((q) =>
+            `${q.n}. ${q.text}\n   Javobi: ${q.given || '—'}${q.ok ? ' ✔' : `  |  To'g'ri: ${q.correct}`}`),
+        ].join('\n');
+        const ok = await copyText(lines);
+        msg(ok ? 'ok' : 'err', ok ? 'Nusxalandi' : 'Nusxalab bo\'lmadi');
+      });
+    } catch (e) { msg('err', e.message); }
+  }
 
   /* ------------------------------------------------------------ ulanish */
   async function loadLan() {
@@ -355,7 +427,6 @@
   async function loadAll() {
     await loadTests();
     await loadStats();
-    await loadTg();
     if ($('p-questions').classList.contains('active')) loadQuestions();
     if ($('p-results').classList.contains('active')) loadResults();
   }

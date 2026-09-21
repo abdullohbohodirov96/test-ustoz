@@ -1,7 +1,7 @@
 # 📝 Test Ustoz — onlayn test tizimi
 
 Talabalar uchun ABCD testlar. Word/Excel'dan savollarni avtomatik yuklash,
-taymer, natijani Telegram botga yuborish, Excel hisobot va sertifikat.
+taymer, natijalarni ko'rish, nusxalash, Excel hisobot va sertifikat.
 
 **Internetsiz (lokal) ham, internetda (Render) ham bir xil ishlaydi.**
 
@@ -18,7 +18,8 @@ taymer, natijani Telegram botga yuborish, Excel hisobot va sertifikat.
 | ➡️ **Faqat oldinga** | Javob berib «Keyingisi» bosiladi. Orqaga qaytish yo'q (brauzer tugmasi ham bloklangan) |
 | 🔀 **Aralashtirish** | Savollar va ABCD variantlar har bir talabaga boshqacha tartibda — ko'chirishning oldi olinadi |
 | 📊 **Natija** | Nechta to'g'ri / nechta noto'g'ri, foiz, baho (2–5), javoblar tahlili |
-| 🤖 **Telegram** | Har bir natija darhol botga tushadi |
+| 👁 **Ko'rish** | Admin panelda har bir talabaning javoblarini bittalab ko'rish |
+| 📋 **Nusxalash** | Natijalarni bir bosishda nusxalab Excel/Word ga qo'yish |
 | 📄 **Sertifikat** | Talaba natijasini PDF qilib saqlaydi (brauzer «Chop etish» oynasi) |
 | 📈 **Excel** | Barcha natijalarni bitta .xlsx faylga yuklab olish |
 | 📶 **QR kod** | Admin panelda talabalar ulanadigan manzil va QR kod |
@@ -64,15 +65,8 @@ Agar ochilmasa — kompyuterdagi **Firewall** 3000-portga ruxsat berishi kerak
 
 ### Lokal rejimda nima ishlaydi / ishlamaydi
 
-| Ishlaydi ✅ | Internet kerak ⚠️ |
-|---|---|
-| Test topshirish, taymer, natija | Telegramga yuborish |
-| Word/Excel import | |
-| Excel hisobot, sertifikat | |
-| Natijalar saqlanishi (`data/test.db` fayli) | |
-
-Telegram ishlamasa ham natijalar yo'qolmaydi — bazada qoladi va Excel'ga
-yuklab olinadi. Internet paydo bo'lganda yana avtomatik yuborila boshlaydi.
+Hammasi internetsiz ishlaydi: test topshirish, taymer, natija, Word/Excel
+import, hisobot, sertifikat. Natijalar `data/test.db` faylida saqlanadi.
 
 ---
 
@@ -93,8 +87,6 @@ Talabalar istalgan joydan, istalgan internetdan kira oladi.
 | `ADMIN_USER` | `admin` |
 | `ADMIN_PASSWORD` | o'zingizning kuchli parolingiz |
 | `SESSION_SECRET` | uzun tasodifiy matn |
-| `TELEGRAM_BOT_TOKEN` | @BotFather bergan token |
-| `TELEGRAM_CHAT_ID` | natija boradigan chat ID |
 
 5. **Deploy** → 2-3 daqiqada manzil beradi: `https://test-ustoz.onrender.com`
 
@@ -104,20 +96,6 @@ Talabalar istalgan joydan, istalgan internetdan kira oladi.
 > ([neon.tech](https://neon.tech) yoki [supabase.com](https://supabase.com)) va
 > uning ulanish manzilini `DATABASE_URL` sifatida Render'ga qo'shing —
 > shunda hamma narsa doimiy saqlanadi. Kodda hech narsa o'zgartirish shart emas.
-
----
-
-## Telegram botni ulash
-
-1. Telegramda **@BotFather** → `/newbot` → nom bering → **tokenni** nusxalang.
-2. O'z botingizga kirib `/start` bosing (aks holda bot sizga yoza olmaydi).
-3. **@userinfobot** ga `/start` yozing — u sizning **chat ID** ingizni beradi.
-4. Token va chat ID ni `.env` faylga (lokal) yoki Render → Environment ga yozing.
-5. Admin panel → **🤖 Telegram** → «Sinov xabari yuborish» bilan tekshiring.
-
-Bir nechta odamga yuborish uchun chat ID larni vergul bilan yozing:
-`123456789,987654321`. Guruhga yuborish uchun botni guruhga qo'shib,
-guruh ID sini (`-100...`) kiriting.
 
 ---
 
@@ -214,7 +192,6 @@ npm run seed    # demo testlarni qayta qo'shish
 | `SESSION_SECRET` | Cookie imzolash kaliti |
 | `DATABASE_URL` | PostgreSQL (bo'sh bo'lsa SQLite ishlatiladi) |
 | `DATA_DIR` | SQLite fayl papkasi (default `./data`) |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Telegram |
 | `SEED_DEMO` | `0` qilinsa demo testlar qo'shilmaydi |
 
 ---

@@ -7,7 +7,6 @@ const path = require('path');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const db = require('../db');
-const tg = require('../telegram');
 const { parseFile } = require('../parsers');
 const { nowIso } = require('../util');
 
@@ -226,6 +225,43 @@ router.get('/results/stats', auth, async (req, res) => {
   });
 });
 
+/** Bitta talabaning to'liq natijasi — savol, uning javobi va to'g'ri javob */
+router.get('/results/:id', auth, async (req, res) => {
+  const a = await db.get('SELECT * FROM attempts WHERE id = ?', [req.params.id]);
+  if (!a) return res.status(404).json({ error: 'Natija topilmadi' });
+
+  const order = JSON.parse(a.order_json || '[]');
+  const answers = JSON.parse(a.answers_json || '{}');
+  const ids = order.map((o) => o.id);
+  let detail = [];
+  if (ids.length) {
+    const ph = ids.map(() => '?').join(',');
+    const qs = await db.all(`SELECT * FROM questions WHERE id IN (${ph})`, ids);
+    const byId = new Map(qs.map((q) => [String(q.id), q]));
+    detail = order.map((o, i) => {
+      const q = byId.get(String(o.id));
+      if (!q) return null;
+      const given = answers[String(o.id)] || null;
+      return {
+        n: i + 1,
+        text: q.text,
+        options: { A: q.opt_a, B: q.opt_b, C: q.opt_c, D: q.opt_d },
+        given, correct: q.correct, ok: given === q.correct,
+      };
+    }).filter(Boolean);
+  }
+
+  res.json({
+    id: a.id,
+    student: { last: a.last_name, first: a.first_name, middle: a.middle_name, group: a.group_name },
+    test: a.test_title,
+    total: a.total, correct: a.correct_count, wrong: a.wrong_count,
+    percent: a.percent, grade: a.grade, passed: !!a.passed, status: a.status,
+    startedAt: a.started_at, finishedAt: a.finished_at,
+    detail,
+  });
+});
+
 router.delete('/results/:id', auth, async (req, res) => {
   await db.run('DELETE FROM attempts WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
@@ -267,18 +303,6 @@ router.get('/results/export.xlsx', auth, async (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="natijalar-${Date.now()}.xlsx"`);
   res.send(buf);
-});
-
-/* ---------------------------------------------------------------- Telegram */
-router.post('/telegram/test', auth, async (req, res) => {
-  res.json(await tg.testConnection());
-});
-
-router.get('/telegram/status', auth, (req, res) => {
-  res.json({
-    configured: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
-    chatId: process.env.TELEGRAM_CHAT_ID ? '***' + String(process.env.TELEGRAM_CHAT_ID).slice(-4) : '',
-  });
 });
 
 /* ----------------------------------------- Lokal tarmoq manzillari + QR */
